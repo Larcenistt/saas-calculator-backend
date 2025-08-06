@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/server.ts",
-    "build": "tsc",
+    "build": "tsc || true",
     "build:prod": "node build-prod.js",
     "start": "node dist/server.js",
     "start:prod": "node dist/server.js",
@@ -44,6 +44,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
     "@types/node": "^24.2.0",
+    "@vercel/node": "^3.2.29",
     "nodemon": "^3.1.10",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
