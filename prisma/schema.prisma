@@ -1,0 +1,193 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// User model - stores user account information
+model User {
+  id               String        @id @default(uuid())
+  email            String        @unique
+  passwordHash     String
+  name             String?
+  avatarUrl        String?
+  emailVerified    Boolean       @default(false)
+  stripeCustomerId String?       @unique
+  
+  // Relations
+  subscription     Subscription?
+  calculations     Calculation[] @relation("UserCalculations")
+  sharedCalculations Calculation[] @relation("SharedCalculations")
+  referralCode     String?       @unique @default(uuid())
+  referredBy       String?
+  referredUsers    User[]        @relation("ReferralRelation")
+  referrer         User?         @relation("ReferralRelation", fields: [referredBy], references: [id])
+  apiKeys          ApiKey[]
+  
+  // Timestamps
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  lastLoginAt      DateTime?
+  
+  @@index([email])
+  @@index([stripeCustomerId])
+}
+
+// Subscription model - tracks user subscription status
+model Subscription {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  stripeSubscriptionId String   @unique
+  stripePriceId        String
+  plan                 Plan     @default(FREE)
+  status               Status   @default(ACTIVE)
+  
+  // Billing details
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean  @default(false)
+  
+  // Usage limits
+  calculationsUsed     Int      @default(0)
+  calculationsLimit    Int      @default(3)
+  apiCallsUsed         Int      @default(0)
+  apiCallsLimit        Int      @default(0)
+  
+  // Additional fields
+  canceledAt           DateTime?
+  lastPaymentAt        DateTime?
+  
+  // Timestamps
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  
+  @@index([stripeSubscriptionId])
+  @@index([status])
+}
+
+// Calculation model - stores pricing calculations
+model Calculation {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, name: "UserCalculations")
+  
+  // Calculation data
+  name        String?
+  inputs      Json     // Store all input parameters
+  results     Json     // Store calculation results
+  notes       String?
+  
+  // Sharing
+  shareId     String?  @unique @default(uuid())
+  isPublic    Boolean  @default(false)
+  sharedAt    DateTime?
+  viewCount   Int      @default(0)
+  sharedWith  User[]   @relation("SharedCalculations")
+  
+  // Versioning
+  version     Int      @default(1)
+  parentId    String?  // For calculation history/versions
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([shareId])
+  @@index([createdAt])
+}
+
+// API Key model - for programmatic access
+model ApiKey {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name        String
+  key         String   @unique
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  
+  // Permissions
+  scopes      String[] @default(["read:calculations", "write:calculations"])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([key])
+  @@index([userId])
+}
+
+// Analytics Event model - tracks user actions
+model AnalyticsEvent {
+  id          String   @id @default(uuid())
+  userId      String?
+  
+  eventName   String   // Also support eventName
+  eventType   String
+  eventData   Json?
+  metadata    Json?
+  
+  // A/B Testing
+  variant     String?
+  
+  // Session tracking
+  sessionId   String?
+  ip          String?
+  userAgent   String?
+  
+  timestamp   DateTime @default(now())
+  createdAt   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+// Email Capture model - for marketing
+model EmailCapture {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  source      String   // popup, footer, exit-intent, etc.
+  
+  // Conversion tracking
+  converted   Boolean  @default(false)
+  convertedAt DateTime?
+  userId      String?
+  
+  // Email marketing
+  subscribed  Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([email])
+  @@index([source])
+}
+
+// Enums
+enum Plan {
+  FREE
+  PRO
+  TEAM
+  ENTERPRISE
+}
+
+enum Status {
+  ACTIVE
+  CANCELED
+  CANCELLED  // Support both spellings
+  CANCELLING // For subscriptions being cancelled
+  PAST_DUE
+  UNPAID
+  TRIALING
+  INACTIVE
+}
